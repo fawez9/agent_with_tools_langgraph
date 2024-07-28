@@ -9,9 +9,7 @@ from dotenv import load_dotenv
 import os
 from typing import Literal
 from langgraph.checkpoint.sqlite import SqliteSaver
-import sqlite3
-from datetime import datetime
-import json
+from memory import store_conversation
 
 # Load environment variables
 load_dotenv()
@@ -55,28 +53,6 @@ memory = SqliteSaver.from_conn_string("agent_memory.db")
 # Initialize memory to persist state
 app = workflow.compile(checkpointer=memory)
 
-# Function to store conversation in memory
-def store_conversation(thread_id, role, content):
-    with sqlite3.connect("agent_memory.db") as conn:
-        cursor = conn.cursor()
-        timestamp = datetime.now().isoformat()
-        cursor.execute("""
-            INSERT INTO conversations (thread_id, timestamp, role, content)
-            VALUES (?, ?, ?, ?)
-        """, (thread_id, timestamp, role, content))
-        conn.commit()
-
-# Function to store tool usage in memory
-def store_tool_usage(thread_id, tool_name, input_data, output_data):
-    with sqlite3.connect("agent_memory.db") as conn:
-        cursor = conn.cursor()
-        timestamp = datetime.now().isoformat()
-        cursor.execute("""
-            INSERT INTO tool_usage (thread_id, timestamp, tool_name, input_data, output_data)
-            VALUES (?, ?, ?, ?, ?)
-        """, (thread_id, timestamp, tool_name, json.dumps(input_data), json.dumps(output_data)))
-        conn.commit()
-
 # Function to interact with the agent
 def interact_with_agent(message, thread_id):
     result = app.invoke(
@@ -87,56 +63,16 @@ def interact_with_agent(message, thread_id):
     # Store the human message
     store_conversation(thread_id, "human", message)
     
-    # Process and store AI responses and tool usage
+    # Process AI responses and tool usage
+    ai_response = ""
+    tool_output = None
     for msg in result['messages']:
         if isinstance(msg, AIMessage):
-            store_conversation(thread_id, "ai", msg.content)
+            ai_response = msg.content.strip()
         elif isinstance(msg, ToolMessage):
-            store_tool_usage(thread_id, msg.tool_call_id, message, msg.content)
+            tool_output = msg.content
     
-    return result
-
-# Function to get conversation history
-def get_conversation_history(thread_id):
-    with sqlite3.connect("agent_memory.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM conversations WHERE thread_id = ? ORDER BY timestamp", (thread_id,))
-        return cursor.fetchall()
-
-# Function to get tool usage history
-def get_tool_usage_history(thread_id):
-    with sqlite3.connect("agent_memory.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM tool_usage WHERE thread_id = ? ORDER BY timestamp", (thread_id,))
-        return cursor.fetchall()
-
-# Initialize the database tables
-def initialize_db():
-    with sqlite3.connect("agent_memory.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS conversations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                thread_id TEXT,
-                timestamp TEXT,
-                role TEXT,
-                content TEXT
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tool_usage (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                thread_id TEXT,
-                timestamp TEXT,
-                tool_name TEXT,
-                input_data TEXT,
-                output_data TEXT
-            )
-        """)
-        conn.commit()
-
-# Main execution block
-if __name__ == "__main__":
-    print("Initializing database...")
-    initialize_db()
-    print("Database initialized successfully.")
+    # Store the AI response
+    store_conversation(thread_id, "ai", ai_response)
+    
+    return result, ai_response, tool_output if tool_output else None
