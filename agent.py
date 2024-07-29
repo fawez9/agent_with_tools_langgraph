@@ -59,7 +59,6 @@ def interact_with_agent(message, thread_id):
         {"messages": [HumanMessage(content=message)]},
         config={"configurable": {"thread_id": thread_id}}
     )
-    
     # Store the human message
     store_conversation(thread_id, "human", message)
     
@@ -74,5 +73,4 @@ def interact_with_agent(message, thread_id):
     
     # Store the AI response
     store_conversation(thread_id, "ai", ai_response)
-    
     return result, ai_response, tool_output if tool_output else None
