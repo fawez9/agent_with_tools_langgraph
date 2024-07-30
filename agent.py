@@ -1,4 +1,3 @@
-# agent.py
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from langgraph.graph import MessagesState, StateGraph, START
 from langgraph.prebuilt import ToolNode
@@ -9,68 +8,74 @@ from dotenv import load_dotenv
 import os
 from typing import Literal
 from langgraph.checkpoint.sqlite import SqliteSaver
-from memory import store_conversation
+from memory import DatabaseHandler
 
-# Load environment variables
-load_dotenv()
+class Agent:
+    def __init__(self, agent_id):
+        self.agent_id = agent_id
+        
+        # Load environment variables
+        load_dotenv()
+        
+        # Configure the Google GenAI
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        
+        self.tools = [add, subtract]
+        
+        # Define the tool node
+        self.tool_node = ToolNode(self.tools)
+        
+        # Bind the tools to the LLM
+        self.llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+        self.llm_with_tools = self.llm.bind_tools(self.tools)
+        
+        # Define memory with a persistent SQLite database file
+        self.memory = SqliteSaver.from_conn_string("agent_memory.db")
+        
+        # Define the workflow
+        self.workflow = StateGraph(MessagesState)
+        self.workflow.add_node("agent", self.call_model)
+        self.workflow.add_node("tools", self.tool_node)
+        self.workflow.add_edge(START, "agent")
+        self.workflow.add_conditional_edges("agent", self.should_continue)
+        self.workflow.add_edge("tools", 'agent')
+        
+        # Initialize memory to persist state
+        self.app = self.workflow.compile(checkpointer=self.memory)
+        
+        # Initialize DatabaseHandler
+        self.db_handler = DatabaseHandler()
 
-# Configure the Google GenAI
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+    def call_model(self, state: MessagesState):
+        response = self.llm_with_tools.invoke(state["messages"])
+        # We return a list, because this will get added to the existing list
+        return {"messages": response}
 
-tools = [add, subtract]
+    def should_continue(self, state: MessagesState) -> Literal["tools", "__end__"]:
+        """Return the next node to execute."""
+        messages = state['messages']
+        if messages[-1].tool_calls:
+            return "tools"
+        return "__end__"
 
-# Define the tool node
-tool_node = ToolNode(tools)
+    def interact_with_agent(self, message, thread_id):
+        result = self.app.invoke(
+            {"messages": [HumanMessage(content=message)]},
+            config={"configurable": {"thread_id": thread_id}}
+        )
+        # Store the human message
+        self.db_handler.store_conversation(thread_id, "human", message)
 
-# Bind the tools to the LLM
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
-llm_with_tools = llm.bind_tools(tools)
+        # Process AI responses and tool usage
+        ai_response = ""
+        tool_output = None
+        for msg in result['messages']:
+            if isinstance(msg, AIMessage):
+                ai_response = msg.content.strip()
+            elif isinstance(msg, ToolMessage):
+                tool_output = msg.content
 
-# Define the function that calls the model
-def call_model(state: MessagesState):
-    response = llm_with_tools.invoke(state["messages"])
-    # We return a list, because this will get added to the existing list
-    return {"messages": response}
+        # Store the AI response
+        self.db_handler.store_conversation(thread_id, "ai", ai_response)
+        return {"output_text": [ai_response]}
 
-def should_continue(state: MessagesState) -> Literal["tools", "__end__"]:
-    """Return the next node to execute."""
-    messages = state['messages']
-    if messages[-1].tool_calls:
-        return "tools"
-    return "__end__"
-
-# Define the workflow
-workflow = StateGraph(MessagesState)
-workflow.add_node("agent", call_model)
-workflow.add_node("tools", tool_node)
-workflow.add_edge(START, "agent")
-workflow.add_conditional_edges("agent", should_continue)
-workflow.add_edge("tools", 'agent')
-
-# Define memory with a persistent SQLite database file
-memory = SqliteSaver.from_conn_string("agent_memory.db")
-
-# Initialize memory to persist state
-app = workflow.compile(checkpointer=memory)
-
-# Function to interact with the agent
-def interact_with_agent(message, thread_id):
-    result = app.invoke(
-        {"messages": [HumanMessage(content=message)]},
-        config={"configurable": {"thread_id": thread_id}}
-    )
-    # Store the human message
-    store_conversation(thread_id, "human", message)
-    
-    # Process AI responses and tool usage
-    ai_response = ""
-    tool_output = None
-    for msg in result['messages']:
-        if isinstance(msg, AIMessage):
-            ai_response = msg.content.strip()
-        elif isinstance(msg, ToolMessage):
-            tool_output = msg.content
-    
-    # Store the AI response
-    store_conversation(thread_id, "ai", ai_response)
-    return result, ai_response, tool_output if tool_output else None
