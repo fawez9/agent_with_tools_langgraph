@@ -38,8 +38,8 @@ class SessionManager:
             input_message = input("You: ")
             if input_message.lower() in ["q", "quit", "exit"]:
                 break
-
-            result, ai_response, tool_output = self.agent.interact_with_agent(input_message, thread_id)
+            
+            result, ai_response, tool_output = self.agent.interact_with_agent(input_message, thread_id) # u can the interact_with_agent_terminal() for terminal mode
 
             if tool_output is not None:
                 print(f"Tool output: {tool_output}")
@@ -50,5 +50,28 @@ class SessionManager:
         conversation_history = self.db_handler.get_conversation_history(thread_id)
         for record in conversation_history:
             print(f"{record[3]} ({record[2]}): {record[4]}")
+    def main(self):
+        while True:
+            print("\n1. Start New Session")
+            print("2. Continue Existing Session")
+            print("3. Quit")
+            choice = input("Choose an option: ")
 
+            if choice == "3":
+                break
+            elif choice == "1":
+                thread_id = self.start_new_session()
+            elif choice == "2":
+                thread_id = self.continue_existing_session()
+                if not thread_id:
+                    continue
+            else:
+                print("Invalid option. Please try again.")
+                continue
+
+            self.interact_with_session(thread_id)
+
+if __name__ == "__main__":
+    session_manager = SessionManager()
+    session_manager.main()
 
