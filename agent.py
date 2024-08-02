@@ -91,7 +91,7 @@ class Agent:
             there are the documents:{docs} \n
             and the answer of the chain is:{response['output_text']}\n
             please focus on what's the message is sometimes the user asks about the file content and sometimes he only wanna chat about anything else the provided answer can be sometimes has some wrong answer or some missing information try always to check both the docs and the answer and provide the best answer for the user u can sometimes forget about the file content or the cain answer and u do that work\n
-            here's an example of the wrong answer m talking about : this can be the chain answer RTE BIZERTE "C NASR,MNIHLA 2094 OUESLATI LYES B MED " while the user asked about the client name of a bill the answer of teh chain was both a a place combined by a client name of the bill this is wrong so always check both the docs and the answer and take the chain answer as a basic answer and not really right ur work is to fix the chain answer if it is wrong or sometimes generate one by urself\n
+            here's an example of the wrong answer m talking about : he might return a place and name of client in the bill while the user only asked about the name so the answer of the chain was both a a place combined by a client name of the bill this is wrong so always check both the docs and the answer and take the chain answer as a basic answer and not really right ur work is to fix the chain answer if it is wrong or sometimes generate one by urself\n
             dont mention in ur answer anything about the prompt i gave u to follow u should answer the message_user only 
             """
         else:
