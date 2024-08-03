@@ -1,14 +1,15 @@
 import re
+import os
+import json
+import uuid
+import spacy
+import pandas as pd
 from PyPDF2 import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from dotenv import load_dotenv
 import google.generativeai as genai
 from langchain.vectorstores import FAISS
-from dotenv import load_dotenv
-import pandas as pd
-import json
-import os
-import uuid
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import UnstructuredURLLoader
 
 class VectorStoreManager:
@@ -145,7 +146,6 @@ class EmbeddingManager:
         
         return chunks
 
-import spacy
 
 class EntityExtractor:
     def __init__(self):
