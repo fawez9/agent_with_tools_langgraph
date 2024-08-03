@@ -1,19 +1,15 @@
-import streamlit as st
+import re
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import google.generativeai as genai
 from langchain.vectorstores import FAISS
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.chains.question_answering import load_qa_chain
-from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
 import pandas as pd
 import json
 import os
 import uuid
-from langchain.document_loaders import UnstructuredURLLoader
-
+from langchain_community.document_loaders import UnstructuredURLLoader
 
 class VectorStoreManager:
     def __init__(self):
@@ -24,7 +20,11 @@ class VectorStoreManager:
         self.vector_store_folder = f"faiss_index_{unique_id}"
         os.makedirs(self.vector_store_folder, exist_ok=True)
         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-        vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
+        
+        # Create metadata for each chunk
+        metadatas = [{"chunk": i, "total_chunks": len(text_chunks)} for i in range(len(text_chunks))]
+        
+        vector_store = FAISS.from_texts(text_chunks, embedding=embeddings, metadatas=metadatas)
         vector_store.save_local(self.vector_store_folder)
         return self.vector_store_folder
 
@@ -70,13 +70,32 @@ class EmbeddingManager:
 
         return raw_text
 
+    def preprocess_text(self, text, file_type):
+        # Common preprocessing
+        text = text.replace('\n', ' ').replace('\r', '')
+        
+        if file_type == 'pdf':
+            # PDF-specific preprocessing
+            text = re.sub(r'\s+', ' ', text)  # Remove extra whitespace
+        elif file_type == 'csv' or file_type == 'xls':
+            # Spreadsheet-specific preprocessing
+            text = re.sub(r'\s{2,}', ' | ', text)  # Replace multiple spaces with a delimiter
+        elif file_type == 'json':
+            # JSON-specific preprocessing
+            text = re.sub(r'[{}\[\]]', '', text)  # Remove brackets
+        
+        return text
+
+    # Update the get_*_text methods to use this preprocessing
     def get_pdf_text(self, pdf_docs):
         text = ""
         for pdf in pdf_docs:
             pdf_reader = PdfReader(pdf)
             for page in pdf_reader.pages:
-                text += page.extract_text()
+                text += self.preprocess_text(page.extract_text(), 'pdf') + "\n"
         return text
+
+    # Similarly, update other get_*_text methods
 
     def get_csv_text(self, csv_docs):
         text = ""
@@ -112,7 +131,28 @@ class EmbeddingManager:
         return text
 
     def get_text_chunks(self, text):
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            separators=["\n\n", "\n", ". ", ", ", " "],
+            length_function=len
+        )
         chunks = text_splitter.split_text(text)
+        
+        # Add metadata to each chunk
+        for i, chunk in enumerate(chunks):
+            chunks[i] = f"Chunk {i+1} of {len(chunks)}:\n{chunk}"
+        
         return chunks
+
+import spacy
+
+class EntityExtractor:
+    def __init__(self):
+        self.nlp = spacy.load("en_core_web_sm")
+
+    def extract_entities(self, text):
+        doc = self.nlp(text)
+        entities = {ent.label_: ent.text for ent in doc.ents}
+        return entities
 
