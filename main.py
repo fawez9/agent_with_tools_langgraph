@@ -5,7 +5,6 @@ import uuid
 class SessionManager:
     def __init__(self):
         self.db_handler = DatabaseHandler()
-        self.agent = Agent(agent_id="agent_1")
         self.sessions = self.db_handler.load_sessions()
 
     def start_new_session(self):

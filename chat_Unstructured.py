@@ -1,13 +1,11 @@
 import re
 import os
 import json
-import uuid
-import spacy
 import pandas as pd
 from PyPDF2 import PdfReader
 from dotenv import load_dotenv
 import google.generativeai as genai
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import UnstructuredURLLoader
@@ -16,8 +14,8 @@ class VectorStoreManager:
     def __init__(self):
         self.vector_store_folder = None
 
-    def create_vector_store(self, text_chunks):
-        unique_id = str(uuid.uuid4())
+    def create_vector_store(self, text_chunks,id):
+        unique_id = id
         self.vector_store_folder = f"faiss_index_{unique_id}"
         os.makedirs(self.vector_store_folder, exist_ok=True)
         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
@@ -147,12 +145,4 @@ class EmbeddingManager:
         return chunks
 
 
-class EntityExtractor:
-    def __init__(self):
-        self.nlp = spacy.load("en_core_web_sm")
-
-    def extract_entities(self, text):
-        doc = self.nlp(text)
-        entities = {ent.label_: ent.text for ent in doc.ents}
-        return entities
 
